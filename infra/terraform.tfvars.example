@@ -1,0 +1,16 @@
+project_name       = "oficina"
+aws_region         = "us-east-1"
+availability_zones = ["us-east-1a", "us-east-1b"]
+vpc_cidr           = "10.20.0.0/16"
+
+# Dois ambientes logicos, uma plataforma de laboratorio.
+environments = {
+  staging = {
+    branch    = "develop"
+    namespace = "oficina-staging"
+  }
+  producao = {
+    branch    = "master"
+    namespace = "oficina-producao"
+  }
+}
