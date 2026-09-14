@@ -2,6 +2,10 @@
 *.tfstate
 *.tfstate.*
 *.tfplan
+backend.hcl
+*.backend.hcl
+*.pem
+*.key
 *.tfvars
 *.tfvars.json
 !*.tfvars.example

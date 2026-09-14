@@ -1,139 +1,129 @@
 # Oficina Infra Kubernetes
 
-Preparacao da infraestrutura AWS da oficina mecanica: rede, Kubernetes (EKS),
-API Gateway e componentes de observabilidade. Este repositorio faz parte da
-separacao em quatro repositorios do Tech Challenge.
+Terraform da plataforma AWS compartilhada do laboratorio: rede privada, EKS e
+contratos de integracao com os outros tres repositorios do Tech Challenge.
 
-## Estado deste PR
+## Estado desta entrega
 
-Implementado:
-- Base Terraform com variaveis validadas e planejamento de nomes e CIDRs.
-- Configuracao de exemplo com staging/develop e producao/master.
-- Pipeline de fmt, init sem backend e validate.
-- Documentacao de arquitetura, ownership e proximas etapas.
+Codigo implementado e validado localmente:
+- VPC em duas ou tres zonas; subnets publicas, privadas de workloads e isoladas de banco.
+- Internet Gateway, NAT configuravel (um no laboratorio ou um por zona), rotas e endpoint S3.
+- EKS 1.35, managed node group AL2023 x86_64 com dois nos por padrao, discos criptografados e IMDSv2.
+- Acesso Kubernetes privado por padrao e administradores IAM explicitos via EKS Access Entries.
+- VPC CNI com IRSA separado, CoreDNS, kube-proxy e metrics-server.
+- Logs do control plane no CloudWatch com retencao e suporte a NetworkPolicy no CNI.
+- SG de origem das Lambdas por ambiente e outputs para integrar RDS, funcoes e Gateway.
+- Backend S3 parcial, arquivo de lock do provider e CI com oito testes simulados.
 
-Ainda pendente:
-- Recursos AWS: VPC, EKS, nos, IAM, API Gateway, VPC Link e balanceador.
-- Instalacao dos componentes de escalabilidade, seguranca e monitoramento.
-- Estado remoto, OIDC, plan autenticado e CD dos dois ambientes.
-- Validacao na AWS e URLs de deploy.
+**Nenhum recurso AWS foi provisionado.** Testes simulados nao comprovam permissao,
+quota, disponibilidade de instancias/addons, bootstrap dos nos ou conectividade real.
 
-A base atual nao possui provider AWS nem recursos provisionaveis. Um CI verde
-confirma a validacao local desta estrutura; nao confirma um cluster em funcionamento.
+Ainda pendentes: bootstrap do bucket/OIDC de CI, plan autenticado, API Gateway,
+VPC Link, balanceador interno/controller, namespaces/RBAC/NetworkPolicies, autoscaler
+de nos, integracao de observabilidade e CD de staging/producao. Os limites min/max
+do node group nao implementam autoscaling por demanda por si so.
 
-## Tecnologias
+## Tecnologias e responsabilidades
 
-Terraform e GitHub Actions na preparacao atual. AWS EKS, API Gateway, VPC e
-Kubernetes fazem parte da arquitetura a implementar na fase de nuvem.
+Terraform >= 1.10 e < 2.0; CI em 1.15.8; provider AWS 6.x fixado em
+`infra/.terraform.lock.hcl`. Amazon VPC, EKS, EC2, IAM e CloudWatch.
 
-## Estrutura
+As quatro camadas .NET, Dockerfile, Docker Compose e kind continuam na
+[Oficina-Mecanica](https://github.com/Venomouus/Oficina-Mecanica).
+Dockerfile nao se aplica a este repositorio, que nao produz uma imagem de aplicacao.
 
-```text
-.github/workflows/ci.yml
-infra/
-  versions.tf
-  variables.tf
-  main.tf
-  outputs.tf
-  terraform.tfvars.example
-  README.md
-docs/
-  arquitetura.md
-```
-
-## Arquitetura planejada
+## Arquitetura
 
 ```mermaid
 flowchart LR
-    User[Cliente] --> Gateway[API Gateway]
-    Gateway --> Lambda[Lambda autenticacao - outro repositorio]
-    Gateway --> Link[VPC Link]
-    Link --> LB[Balanceador interno]
-    LB --> EKS[EKS: staging e producao]
-    EKS --> RDS[(RDS - outro repositorio)]
-    Lambda --> RDS
-    EKS -.-> Monitoring[Observabilidade]
+    Client[Cliente] -.-> Gateway[API Gateway - proxima integracao]
+    Gateway -.-> Auth[Lambda - repo serverless]
+    Gateway -.-> Link[VPC Link e ALB interno - pendentes]
+    subgraph VPC[VPC - Terraform implementado]
+        Public[Subnets publicas e NAT]
+        Private[Subnets privadas]
+        DBNet[Subnets isoladas de banco]
+        Private --> EKS[EKS e managed nodes]
+        Private --> Public
+        EKS --> CW[CloudWatch: logs do control plane]
+    end
+    Link -.-> EKS
+    EKS -.-> RDS[RDS - repo database]
+    Auth -.-> RDS
+    DBNet -.-> RDS
 ```
 
-Os componentes do diagrama ainda nao foram provisionados.
-[Detalhes, limites do laboratorio e responsabilidades](docs/arquitetura.md).
+As linhas tracejadas indicam integracoes ainda pendentes.
+[Arquitetura e limites](docs/arquitetura.md),
+[contratos entre repositorios](docs/integracoes.md),
+[RFC da escolha AWS](docs/rfcs/001-plataforma-aws.md) e
+[ADR da plataforma compartilhada](docs/adrs/001-plataforma-compartilhada.md).
 
-## Executar a validacao local
+## Validar localmente sem AWS
 
-Requer Terraform >= 1.6 e < 2.0. A pipeline usa 1.15.8.
+Na raiz do repositorio:
 
 ```powershell
 terraform -chdir=infra fmt -check -recursive
-terraform -chdir=infra init -backend=false -input=false
-terraform -chdir=infra validate
+terraform -chdir=infra init -backend=false -input=false -lockfile=readonly
+terraform -chdir=infra validate -no-color
+terraform -chdir=infra test -no-color
 ```
 
-O arquivo `infra/terraform.tfvars.example` apresenta os dois ambientes logicos.
-A proposta economica e usar um cluster compartilhado no laboratorio. Os estados
-e o fluxo de alteracao dos recursos compartilhados serao definidos no CD para
-evitar duas pipelines gerenciando o mesmo recurso de forma independente.
+Esses comandos nao precisam de conta/credenciais AWS. O init baixa o provider do
+Registry; os testes usam `mock_provider "aws"` em todos os cenarios. Nao substitua
+esses testes por um apply real durante o desenvolvimento.
 
-Nao e necessario configurar credenciais AWS para o CI atual.
-Dockerfile nao se aplica: este repositorio contem infraestrutura, sem aplicacao
-containerizada. Docker Compose, kind e a imagem da API ficam na aplicacao principal.
+O [arquivo de exemplo](infra/terraform.tfvars.example) usa conta/role ilustrativas.
+Nao e necessario copia-lo para executar os testes.
+[Configuracao, estado remoto e deploy futuro](infra/README.md).
 
-## CI e protecao de branches
+## CI e branches
 
-Fluxo: `develop -> feature/config-ci -> PR para develop -> PR para master`.
+Fluxo: `feature/* -> PR develop -> PR master`.
+O workflow `.github/workflows/ci.yml` executa fmt, init sem backend, validate e
+test em PRs para develop/master, pushes nessas branches e acionamento manual.
+Mantenha **validate-terraform** obrigatorio nas protecoes das duas branches,
+PR obrigatorio, sem bypass, force push ou exclusao. Para trabalho individual,
+aprovacao por outra pessoa pode permanecer desabilitada.
 
-A pipeline executa em:
-- PRs destinados a develop e master.
-- Pushes para develop e master.
-- Acionamento manual.
-
-Um push em feature so inicia esse CI automaticamente quando ha PR aberto.
-O unico check deste repositorio e **validate-terraform**.
-
-Depois da primeira execucao bem-sucedida, configure as regras de develop e master:
-1. Exigir Pull Request.
-2. Exigir validate-terraform aprovado.
-3. Exigir resolucao de conversas e impedir bypass.
-4. Bloquear force push e exclusao.
-5. Para trabalho individual, deixar Require approvals desmarcado.
-
-Nao adicione os checks build-test, docker ou deploy-kind da API aqui.
-
-## Deploy
-
-| Ambiente GitHub | Branch autorizada | Namespace planejado |
+| Ambiente GitHub | Branch | Namespace a criar |
 |---|---|---|
 | staging | develop | oficina-staging |
 | producao | master | oficina-producao |
 
-Mantenha a variavel de repositorio `DEPLOY_ENABLED=false`.
+**Mantenha DEPLOY_ENABLED=false.** Este workflow ainda e apenas CI, sem jobs apply.
+A variavel nao impede um apply manual no terminal.
 
-Este PR contem apenas CI. Ainda nao existe job de deploy que consuma essa variavel;
-muda-la para true agora nao provisiona a AWS. Ao implementar o CD, seus jobs
-deverao exigir o valor true e referenciar os ambientes corretos.
+O root `infra/` administra recursos compartilhados em **um unico estado**.
+A proposta de CD reserva a aplicacao desse root para a branch master; staging e
+producao terao roots/estados proprios para componentes especificos. Nunca aplicar
+essa mesma VPC/EKS em estados diferentes para cada branch. O CD automatico de
+ambos os ambientes e um requisito ainda a implementar; veja o ADR.
 
-Antes de habilitar deploy sera necessario:
-- Confirmar acesso aos servicos, creditos e estimativa de custos.
-- Implementar recursos, estado remoto com locking e identidade OIDC.
-- Definir a promocao dos recursos compartilhados e isolar os estados especificos
-  dos ambientes.
-- Executar plan e validar permissoes, rede e dependencias.
-- Integrar Gateway, API e funcoes, com testes apos o deploy.
-- Documentar URLs reais, rollback e remocao dos recursos apos a avaliacao.
+## Custos e ciclo de vida
 
-[Detalhes Terraform e ordem de implementacao](infra/README.md).
+O codigo pode ser desenvolvido sem AWS. Provisionar EKS, EC2/EBS, NAT e IPv4
+tem cobranca; credito de conta nao significa infraestrutura permanentemente gratis.
+Consulte os [precos EKS](https://aws.amazon.com/eks/pricing/) e
+[precos VPC/NAT](https://aws.amazon.com/vpc/pricing/) antes de habilitar o deploy.
+
+O padrao single usa um NAT, aceitando dependencia da zona de saida. per_az aumenta
+a disponibilidade e a quantidade de NATs. Preparar e testar agora; provisionar
+perto da demonstracao, manter pelo periodo de avaliacao e remover apos preservar
+os dados/evidencias. O backend e os backups exigem ciclo de vida separado.
 
 ## APIs relacionadas
 
-Este repositorio nao expoe uma API de negocio.
+- [Swagger/execucao da API principal](https://github.com/Venomouus/Oficina-Mecanica/blob/master/docs/autenticacao-cliente-jwt.md).
+- [Contrato do serverless](https://github.com/Venomouus/Oficina-serverless/blob/master/docs/contratos.md).
+- Swagger API local no roteiro integrado: http://127.0.0.1:5080/swagger.
+- Swagger serverless local: http://127.0.0.1:5081/swagger.
+- API com Docker Compose completo: http://localhost:8080/swagger.
+- URLs de deploy AWS: ainda inexistentes.
 
-- [Swagger e instrucoes da API principal](https://github.com/Venomouus/Oficina-Mecanica#collection--swagger).
-- [Contratos planejados da autenticacao e notificacao](https://github.com/Venomouus/Oficina-serverless/blob/master/docs/contratos.md).
-- Swagger local da API: http://localhost:8080/swagger, apos iniciar o Docker Compose
-  no repositorio da aplicacao.
-- URLs AWS: pendentes da implementacao e do deploy.
+## Repositorios relacionados
 
-## Repositorios
-
-- [Aplicacao](https://github.com/Venomouus/Oficina-Mecanica)
-- [Serverless](https://github.com/Venomouus/Oficina-serverless)
-- [Banco gerenciado](https://github.com/Venomouus/Oficina-infra-database)
+- [Aplicacao](https://github.com/Venomouus/Oficina-Mecanica).
+- [Serverless](https://github.com/Venomouus/Oficina-serverless).
+- [Banco gerenciado](https://github.com/Venomouus/Oficina-infra-database).
