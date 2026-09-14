@@ -13,15 +13,15 @@ Codigo implementado e validado localmente:
 - VPC CNI com IRSA separado, CoreDNS, kube-proxy e metrics-server.
 - Logs do control plane no CloudWatch com retencao e suporte a NetworkPolicy no CNI.
 - SG de origem das Lambdas por ambiente e outputs para integrar RDS, funcoes e Gateway.
-- Backend S3 parcial, arquivo de lock do provider e oito testes simulados da plataforma.
+- Backend S3 parcial, lock do provider e testes simulados da plataforma e IAM do controlador.
 - Root gateway/ por ambiente: HTTP API HTTPS, integracao Lambda v2, authorizer JWT e rotas de cliente com backend privado opcional.
-- Logs, limites de requisicoes e 12 testes simulados do Gateway; CI verifica ambos os roots.
+- Logs, limites de requisicoes e 12 testes simulados do Gateway.
 
 **Nenhum recurso AWS foi provisionado.** Testes simulados nao comprovam permissao,
 quota, disponibilidade de instancias/addons, bootstrap dos nos ou conectividade real.
 
 Ainda pendentes: bootstrap do bucket/OIDC de CI, plan autenticado, provisionamento/integracao do Gateway,
-VPC Link, balanceador interno/controller, namespaces/RBAC/NetworkPolicies, autoscaler
+instalacao do controlador, namespaces/RBAC/NetworkPolicies, autoscaler
 de nos, integracao de observabilidade e CD de staging/producao. Os limites min/max
 do node group nao implementam autoscaling por demanda por si so.
 
@@ -40,7 +40,7 @@ Dockerfile nao se aplica a este repositorio, que nao produz uma imagem de aplica
 flowchart LR
     Client[Cliente] -.-> Gateway[API Gateway - Terraform gateway/]
     Gateway -.-> Auth[Lambda - repo serverless]
-    Gateway -.-> Link[VPC Link e ALB interno - pendentes]
+    Gateway -.-> Link[VPC Link e ALB interno - Terraform backend/]
     subgraph VPC[VPC - Terraform implementado]
         Public[Subnets publicas e NAT]
         Private[Subnets privadas]
@@ -88,7 +88,7 @@ simulada. [Bootstrap, rotas e contratos do Gateway](gateway/README.md).
 
 Fluxo: `feature/* -> PR develop -> PR master`.
 O workflow `.github/workflows/ci.yml` executa fmt, init sem backend, validate e
-test de infra/ e gateway/ em PRs para develop/master, pushes nessas branches e acionamento manual.
+test de infra/, gateway/ e backend/ em PRs para develop/master, pushes nessas branches e acionamento manual.
 Mantenha **validate-terraform** obrigatorio nas protecoes das duas branches,
 PR obrigatorio, sem bypass, force push ou exclusao. Para trabalho individual,
 aprovacao por outra pessoa pode permanecer desabilitada.
@@ -103,7 +103,7 @@ A variavel nao impede um apply manual no terminal.
 
 O root `infra/` administra recursos compartilhados em **um unico estado**.
 A proposta de CD reserva a aplicacao desse root para a branch master; staging e
-producao usam gateway/ com estados proprios para os Gateways. Nunca aplicar
+producao usam gateway/ e backend/ com estados proprios por ambiente. Nunca aplicar
 essa mesma VPC/EKS em estados diferentes para cada branch. O CD automatico de
 ambos os ambientes e um requisito ainda a implementar; veja o ADR.
 
@@ -133,3 +133,14 @@ os dados/evidencias. O backend e os backups exigem ciclo de vida separado.
 - [Aplicacao](https://github.com/Venomouus/Oficina-Mecanica).
 - [Serverless](https://github.com/Venomouus/Oficina-serverless).
 - [Banco gerenciado](https://github.com/Venomouus/Oficina-infra-database).
+
+## Backend privado da API
+
+O root [backend/](backend/README.md) implementa VPC Link, ALB interno, target group IP
+e SGs por ambiente, com dez testes simulados. O output customer_backend conecta
+o Gateway; kubernetes_manifest fornece Service ClusterIP e TargetGroupBinding
+para a API em 8080. Repetir os comandos de validacao com -chdir=backend.
+
+O root infra/ tambem prepara IAM/IRSA e values de um unico controlador de targets,
+com um teste adicional. [Instalacao futura do controlador](docs/controller.md).
+CI valida os tres roots. Nenhum recurso ou workload foi instalado na AWS.

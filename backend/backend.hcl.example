@@ -1,0 +1,5 @@
+bucket       = "SUBSTITUIR-bucket-de-estado"
+key          = "oficina/staging/backend.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true
