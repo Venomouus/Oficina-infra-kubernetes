@@ -5,9 +5,9 @@ foram provisionados. Componentes e integracoes seguintes estao marcados no diagr
 
 ```mermaid
 flowchart TD
-    Cliente[Cliente] -.-> Gateway[API Gateway HTTP API - pendente]
+    Cliente[Cliente] -.-> Gateway[API Gateway HTTP API - Terraform gateway/]
     Gateway -.-> Auth[Lambda auth - repo serverless]
-    Gateway -.-> VPCLink[VPC Link e ALB interno - pendentes]
+    Gateway -.-> VPCLink[VPC Link e ALB interno - Terraform backend/]
     subgraph VPC[VPC em duas ou tres zonas]
         Public[Subnets publicas: NAT]
         Private[Subnets privadas: EKS workers]
@@ -84,7 +84,7 @@ Esses requisitos continuam pendentes.
 
 | Repositorio | Responsabilidade |
 |---|---|
-| Oficina-infra-kubernetes | VPC, EKS, componentes compartilhados; proximamente Gateway, VPC Link, ALB e monitoramento |
+| Oficina-infra-kubernetes | VPC, EKS, Gateway, VPC Link, ALB e IAM do controlador; monitoramento da aplicacao pendente |
 | Oficina-Mecanica | API, imagem, migrations e manifests de workloads/HPA |
 | Oficina-serverless | Lambda auth/notificacao, IAM das funcoes e fila/DLQ |
 | Oficina-infra-database | RDS, backups, usuarios e regras de banco |

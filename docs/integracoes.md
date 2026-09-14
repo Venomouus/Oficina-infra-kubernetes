@@ -36,9 +36,9 @@ consulta RDS e usa chave privada guardada em gerenciador de segredos.
 ## Gateway (root gateway/ neste repositorio)
 
 Implementado HTTP API com um state por ambiente, integracao Lambda v2,
-authorizer JWT e integracao privada opcional. VPC Link e ALB interno ainda precisam
-ser criados na etapa de publicacao da API; o root consome seus identificadores.
-O ALB sera gerenciado por Terraform da plataforma e os targets serao registrados
+authorizer JWT e integracao privada opcional. O root backend/ implementa VPC Link e ALB
+interno por ambiente e exporta customer_backend para o Gateway correspondente.
+O ALB e o target group sao gerenciados pelo Terraform backend/; os targets serao registrados
 pelo AWS Load Balancer Controller via TargetGroupBinding, apos instalar o controller.
 Nao criar o mesmo ALB tambem via Ingress/Service do Kubernetes.
 
@@ -69,9 +69,9 @@ quatro rotas implementadas. Veja [runbook do Gateway](../gateway/README.md).
 ## Sequencia de deploy a implementar
 
 1. Bootstrap: bucket de estado, GitHub OIDC e roles de CI/CD.
-2. Fundacao compartilhada: este root VPC/EKS.
+2. Fundacao compartilhada: root infra/ VPC/EKS e IAM do controlador.
 3. Banco RDS e componentes Kubernetes (namespaces, RBAC, NetworkPolicy, controller e autoscaler).
-4. Gateway/ALB por ambiente, inicialmente sem integracoes de Lambda.
+4. Roots gateway/ e backend/ por ambiente, inicialmente sem integracoes de Lambda.
 5. Funcoes com issuer da URL publica e conexao RDS; deploy da API com migrations.
 6. Integracoes/rotas Gateway e targets do ALB; smoke tests externos.
 7. Instrumentacao, dashboards/alertas e evidencia dos dois ambientes.
@@ -80,3 +80,21 @@ Cada recurso tera um unico dono/estado. Ambos os ambientes precisam de CD automa
 ainda nao implementado. A fundacao e compartilhada e sera aplicada pela master;
 deploys especificos de develop/master usam seus proprios estados/locks. O ciclo de
 alteracoes compartilhadas afeta os dois ambientes e deve constar da demonstracao.
+
+## Contratos do backend privado
+
+- infra/ exporta load_balancer_controller_values para Helm, uma unica instalacao.
+- backend/ recebe platform e environment; usa os namespaces definidos no contrato.
+- backend/ exporta backend (v1: ambiente/regiao/cluster/namespace/ARNs) e
+  customer_backend (vpc_id, vpc_link_id, listener_arn, server_name_to_verify).
+- gateway/ recebe customer_backend do MESMO ambiente, apos targets saudaveis.
+- kubernetes_manifest fornece Service ClusterIP e TGB de oficina-api; pods usam
+  app=oficina-api, porta 8080 e health /health. Nao contem Deployment/segredos.
+- IAM compartilhado permite registro apenas nos TGs do projeto nos dois ambientes.
+  A administracao do backend controla TGB; RBAC deve impedir sua edicao por workloads.
+- SGs de ALB/Link e ingress ALB->EKS pertencem somente a backend/. Sem networking
+  no TGB; o controlador nao altera SGs nem provisiona balanceadores.
+
+Estados: infra/ compartilhado; backend/ e gateway/ independentes por ambiente.
+Nao usar o root backend/ como backend S3 de outro root: o nome designa o destino
+privado da API. [Runbook](../backend/README.md) e [controlador](controller.md).

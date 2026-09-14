@@ -165,3 +165,10 @@ Referencias oficiais:
 Desabilitar/remover rotas e integracoes antes de remover VPC Link, listener e
 Lambda. Remover a permissao de invocacao no state serverless. Apagar um state
 nao remove seus recursos; revisar os planos de destruicao e recursos restantes.
+
+## Origem do backend privado
+
+O objeto customer_backend agora e produzido pelo root [backend/](../backend/README.md)
+deste repositorio, em um state separado para cada ambiente. Consumir seu output
+apos conferir backend.environment e a saude dos targets. Nao inventar ARN/ID
+nem copiar o listener de staging para producao. O provisionamento ainda esta pendente.

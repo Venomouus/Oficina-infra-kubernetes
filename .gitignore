@@ -20,3 +20,6 @@ crash.*.log
 .idea/
 .DS_Store
 Thumbs.db
+
+# Outputs locais gerados para instalacao do controlador/backend.
+*.generated.yaml

@@ -26,21 +26,21 @@ jobs:
           terraform_version: '1.15.8'
       - name: Check formatting
         run: |
-          for root in infra gateway; do
+          for root in infra gateway backend; do
             terraform -chdir="$root" fmt -check -recursive
           done
       - name: Initialize without remote backend
         run: |
-          for root in infra gateway; do
+          for root in infra gateway backend; do
             terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
           done
       - name: Validate configuration
         run: |
-          for root in infra gateway; do
+          for root in infra gateway backend; do
             terraform -chdir="$root" validate -no-color
           done
-      - name: Test platform and gateways with mocked AWS provider
+      - name: Test platform, gateways and private backends with mocked AWS provider
         run: |
-          for root in infra gateway; do
+          for root in infra gateway backend; do
             terraform -chdir="$root" test -no-color
           done

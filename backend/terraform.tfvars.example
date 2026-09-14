@@ -1,0 +1,19 @@
+# IDs ilustrativos: preencher depois do apply de infra/.
+aws_account_id = "123456789012"
+aws_region     = "us-east-1"
+environment    = "staging"
+platform = {
+  contract_version              = 1
+  aws_region                    = "us-east-1"
+  vpc_id                        = "vpc-0123456789abcdef0"
+  cluster_name                  = "oficina-lab-eks"
+  private_subnet_ids            = ["subnet-0123456789abcdef0", "subnet-0123456789abcdef1"]
+  application_security_group_id = "sg-0123456789abcdef0"
+  environments = {
+    staging  = { branch = "develop", namespace = "oficina-staging" }
+    producao = { branch = "master", namespace = "oficina-producao" }
+  }
+}
+# null: HTTP somente dentro da VPC; entrada publica do Gateway permanece HTTPS.
+listener_tls  = null
+allow_destroy = false

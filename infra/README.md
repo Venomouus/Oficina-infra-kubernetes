@@ -119,3 +119,11 @@ terraform -chdir=infra apply destroy.tfplan
 O bucket de estado tem ciclo de vida separado e nao e removido por esse root.
 Snapshots finais de RDS e logs preservados podem continuar existindo/cobrando;
 verificar a conta apos encerrar o laboratorio.
+
+## IAM do controlador de targets
+
+Este root prepara uma role IRSA para kube-system/aws-load-balancer-controller,
+limitada ao registro de targets nos grupos do projeto criados por backend/.
+Exporta load_balancer_controller_values para uma unica instalacao Helm compartilhada.
+Nao instala o controlador nem cria ALB por conta propria.
+[Configuracao e instalacao futura](../docs/controller.md).
