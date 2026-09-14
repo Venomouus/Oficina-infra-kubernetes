@@ -1,0 +1,7 @@
+# Bucket previamente criado no bootstrap, com versionamento, criptografia e acesso privado.
+bucket       = "SUBSTITUA-PELO-BUCKET-DE-ESTADO"
+key          = "oficina/shared/platform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true
+# Nao colocar credenciais neste arquivo. Usar SSO local / OIDC no CI.
