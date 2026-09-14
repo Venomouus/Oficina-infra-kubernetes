@@ -1,72 +1,98 @@
-# Arquitetura planejada do laboratorio
+# Arquitetura AWS do laboratorio
 
-Todos os componentes AWS abaixo estao planejados. O codigo atual so prepara
-nomenclatura, CIDRs e validacao local; nao implementa essa arquitetura ainda.
+O Terraform implementa a fundacao de rede e Kubernetes. Os recursos ainda nao
+foram provisionados. Componentes e integracoes seguintes estao marcados no diagrama.
 
 ```mermaid
 flowchart TD
-    Client[Cliente / Swagger] --> Gateway[API Gateway]
-    Gateway -->|Autenticacao por CPF| Auth[Lambda - repositorio serverless]
-    Auth --> RDS[(RDS - repositorio database)]
-    Gateway -->|Rotas protegidas por JWT| Link[VPC Link]
-    Link --> LB[Balanceador interno]
-    subgraph EKS[EKS compartilhado do laboratorio]
-        Staging[Namespace oficina-staging]
-        Producao[Namespace oficina-producao]
+    Cliente[Cliente] -.-> Gateway[API Gateway HTTP API - pendente]
+    Gateway -.-> Auth[Lambda auth - repo serverless]
+    Gateway -.-> VPCLink[VPC Link e ALB interno - pendentes]
+    subgraph VPC[VPC em duas ou tres zonas]
+        Public[Subnets publicas: NAT]
+        Private[Subnets privadas: EKS workers]
+        Isolated[Subnets isoladas: destino RDS]
+        Private --> Public
+        subgraph EKS[EKS compartilhado]
+            Nodes[Managed nodes: AL2023 e IMDSv2]
+            Addons[CNI IRSA, DNS, kube-proxy, metrics-server]
+            Staging[oficina-staging - a criar]
+            Producao[oficina-producao - a criar]
+            Nodes --> Addons
+            Nodes -.-> Staging
+            Nodes -.-> Producao
+        end
+        Private --> Nodes
+        Isolated -.-> RDS[RDS - repo database]
     end
-    LB --> Staging
-    LB --> Producao
-    Staging --> RDS
-    Producao --> RDS
-    EKS -.-> Monitoring[Metricas, logs, traces e alertas]
+    VPCLink -.-> Staging
+    VPCLink -.-> Producao
+    Staging -.-> RDS
+    Producao -.-> RDS
+    Auth -.-> RDS
+    EKS --> ControlLogs[CloudWatch: logs do control plane]
+    EKS -.-> Monitor[Observabilidade da aplicacao - pendente]
 ```
 
-## Rede
+## Rede e disponibilidade
 
-Planejar subnets em pelo menos duas zonas. API e banco devem comunicar pela rede
-privada. A entrada externa da aplicacao deve passar pelo Gateway, com autenticacao
-e regras adequadas a cada rota.
+Subnets publicas usam os primeiros blocos do CIDR; isoladas de banco usam offset 4
+e privadas de workloads offset 8. Cada sub-rede recebe quatro bits adicionais de
+prefixo; os blocos nao se sobrepoem, inclusive com tres zonas. Nenhuma subnet
+atribui IPv4 publico automaticamente. EKS nodes usam apenas subnets privadas.
 
-A estrategia de saida (NAT e/ou endpoints) precisa ser dimensionada na etapa AWS.
-Nao incluir componentes cobrados continuamente antes de estimar uso e duracao.
+Apenas as publicas apontam ao Internet Gateway. As privadas saem por NAT, para
+imagens e APIs externas; as de banco so possuem a rota local da VPC. O endpoint S3
+e associado as tabelas privadas. O SG default da VPC nao tem regras de acesso.
 
-## Ambientes
+O modo single usa um NAT na primeira zona e e uma concessao de custo do laboratorio.
+Uma falha nessa zona pode interromper a saida de ambas as zonas, mesmo que outros
+nos estejam saudaveis. per_az cria NAT e rota de saida em cada zona.
 
-Para o laboratorio, a proposta e compartilhar um EKS e separar namespaces,
-configuracoes, permissoes e rotas de staging e producao. O nome producao e o
-ambiente de demonstracao da branch master, nao uma declaracao de isolamento
-corporativo completo.
+O control plane EKS e gerenciado. Dois workers reduzem dependencia de um unico no,
+mas nao comprovam disponibilidade da aplicacao. Distribuicao dos pods, probes,
+requests/limits, PDB, HPA e teste de falha ainda devem ser aplicados e demonstrados.
 
-A falha do cluster ou de componentes compartilhados pode afetar os dois ambientes.
-Namespaces sozinhos nao fornecem isolamento de rede; RBAC, NetworkPolicy e acesso
-a segredos por workload ainda precisam ser implementados.
+## Identidade e isolamento
 
-## Responsabilidades
+Acesso Kubernetes usa IAM Access Entries explicitas. O endpoint e privado por
+padrao; acesso publico opcional recebe apenas CIDRs administrativos restritos.
+Ninguem recebe administracao automaticamente por ter criado o cluster.
+
+O CNI usa role IRSA limitada ao service account kube-system/aws-node. Workers
+recebem WorkerNodePolicy e permissao de pull do ECR, nao CNI policy. Discos sao
+criptografados, nao ha SSH remoto configurado, IMDS exige token e hop limit 1.
+
+O SG do cluster/nodes sera origem permitida no RDS. Essa identidade e compartilhada;
+nao diferencia staging/producao. Lambdas possuem um SG de origem por ambiente.
+O repo database implementara ingress PostgreSQL por SG e egress das Lambdas ao RDS.
+
+Os namespaces so estao declarados como contrato, ainda nao criados. CNI esta
+configurado para suportar NetworkPolicy, mas as politicas/RBAC, segredos separados
+e identidades dos workloads serao implementados na proxima camada. Compartilhar
+cluster significa compartilhar falhas e administracao; nao equivale a isolamento
+corporativo por conta/cluster.
+
+## Observabilidade
+
+CloudWatch recebe os cinco tipos de logs do control plane com retencao definida.
+Metrics-server fornece medidas atuais para a API de metricas/HPA. Nenhum deles
+substitui dashboards historicos de OS, traces, alertas ou logs JSON da aplicacao.
+Esses requisitos continuam pendentes.
+
+## Ownership
 
 | Repositorio | Responsabilidade |
 |---|---|
-| Oficina-infra-kubernetes | Rede, EKS, API Gateway, VPC Link, componentes compartilhados e infraestrutura de monitoramento |
-| Oficina-Mecanica | API, imagem, migrations, Deployment/Service, probes, requests/limits e HPA da aplicacao |
-| Oficina-serverless | Funcoes, IAM especifico, fila de notificacoes e DLQ |
-| Oficina-infra-database | RDS, backups e regras de acesso ao banco |
+| Oficina-infra-kubernetes | VPC, EKS, componentes compartilhados; proximamente Gateway, VPC Link, ALB e monitoramento |
+| Oficina-Mecanica | API, imagem, migrations e manifests de workloads/HPA |
+| Oficina-serverless | Lambda auth/notificacao, IAM das funcoes e fila/DLQ |
+| Oficina-infra-database | RDS, backups, usuarios e regras de banco |
 
-Um recurso deve ter um unico dono. A plataforma recebe configuracoes/identificadores
-das funcoes e da aplicacao para integrar o Gateway. Rede e cluster podem ser
-provisionados antes dessas integracoes; o Gateway e concluido quando os destinos
-existirem. O banco recebe os identificadores de rede publicados pela plataforma.
+A fundacao deve ter um unico estado. Estados de componentes especificos por
+ambiente serao separados, sem criar duas copias dos mesmos recursos compartilhados.
+Consultar [contratos e ordem de integracao](integracoes.md).
 
-A instrumentacao da API/Lambdas pertence aos respectivos repositorios.
-Os manifests locais de kind e PostgreSQL continuam na API para desenvolvimento.
-
-## Provas necessarias na fase AWS
-
-- Roteamento pelo Gateway e rejeicao de tokens invalidos.
-- Lambda consultando cliente/status no banco e emitindo token valido.
-- API usando RDS e autorizacao por perfil e propriedade da OS.
-- HPA funcional, recursos dos pods e capacidade de nos adequada.
-- Healthchecks e recuperacao de replicas.
-- Logs JSON correlacionados, traces e dashboards com as metricas do desafio.
-- Deploy automatico das duas branches e evidencia das pipelines.
-- RFCs, ADRs e procedimentos de rollback e remocao dos recursos.
-
-Nenhuma dessas provas de nuvem e substituida pelo check validate-terraform deste PR.
+Fontes: [acesso EKS](https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html),
+[metrics-server](https://docs.aws.amazon.com/eks/latest/userguide/metrics-server.html) e
+[NetworkPolicy com CNI](https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html).

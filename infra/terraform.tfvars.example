@@ -3,14 +3,30 @@ aws_region         = "us-east-1"
 availability_zones = ["us-east-1a", "us-east-1b"]
 vpc_cidr           = "10.20.0.0/16"
 
-# Dois ambientes logicos, uma plataforma de laboratorio.
+# Dados ilustrativos: substitua pela conta e role que farao a administracao.
+aws_account_id = "123456789012"
+cluster_admin_principal_arns = ["arn:aws:iam::123456789012:role/OficinaPlatformAdmin"]
+
+kubernetes_version = "1.35"
+node_instance_type = "t3.medium"
+node_scaling       = { min = 2, desired = 2, max = 3 }
+
+# Concessao do laboratorio: um NAT; per_az remove essa dependencia zonal de saida.
+nat_mode = "single"
+# Vazio = endpoint Kubernetes apenas privado. Para acesso local, seu IP publico/32.
+# Nunca liberar 0.0.0.0/0; o runner de deploy precisara de acesso privado ou IP fixo.
+eks_public_access_cidrs = []
+log_retention_days      = 7
+
+# null consulta a versao default compativel. Fixar apos validar plan na conta.
+addon_versions = {
+  vpc-cni        = null
+  kube-proxy     = null
+  coredns        = null
+  metrics-server = null
+}
+
 environments = {
-  staging = {
-    branch    = "develop"
-    namespace = "oficina-staging"
-  }
-  producao = {
-    branch    = "master"
-    namespace = "oficina-producao"
-  }
+  staging  = { branch = "develop", namespace = "oficina-staging" }
+  producao = { branch = "master", namespace = "oficina-producao" }
 }
