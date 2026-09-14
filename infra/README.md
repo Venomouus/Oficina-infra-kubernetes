@@ -3,6 +3,9 @@
 Este root declara recursos AWS reais. Nesta entrega foi validado somente com
 fmt, validate e testes mockados. Nenhum apply ou plan autenticado foi executado.
 
+O Gateway esta no root separado [gateway/](../gateway/README.md), com um state por
+ambiente. Nao misturar seu backend com o state compartilhado deste root.
+
 ## Arquivos
 
 | Arquivo | Responsabilidade |

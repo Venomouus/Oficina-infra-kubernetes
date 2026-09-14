@@ -1,0 +1,12 @@
+aws_account_id = "123456789012"
+aws_region = "us-east-1"
+project_name = "oficina"
+environment = "staging"
+# Fase 1: URL e stage, sem rotas. Nao usar credenciais/ARNs ficticios para deploy.
+authentication = null
+jwt_ready = false
+customer_backend = null
+throttling = { rate = 5, burst = 10, auth_rate = 1, auth_burst = 2 }
+# Fase 2: preencher authentication com o output do serverless; seu issuer deve ser
+# a URL criada por este root. Testar auth/discovery/JWKS antes de jwt_ready=true.
+# Fase 3: fornecer VPC Link e listener privado apos instalar a API no EKS.
