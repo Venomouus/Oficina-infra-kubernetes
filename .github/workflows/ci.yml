@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: infra
+        working-directory: .
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,10 +25,22 @@ jobs:
         with:
           terraform_version: '1.15.8'
       - name: Check formatting
-        run: terraform fmt -check -recursive
+        run: |
+          for root in infra gateway; do
+            terraform -chdir="$root" fmt -check -recursive
+          done
       - name: Initialize without remote backend
-        run: terraform init -backend=false -input=false -lockfile=readonly
+        run: |
+          for root in infra gateway; do
+            terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
+          done
       - name: Validate configuration
-        run: terraform validate -no-color
-      - name: Test platform with mocked AWS provider
-        run: terraform test -no-color
+        run: |
+          for root in infra gateway; do
+            terraform -chdir="$root" validate -no-color
+          done
+      - name: Test platform and gateways with mocked AWS provider
+        run: |
+          for root in infra gateway; do
+            terraform -chdir="$root" test -no-color
+          done
