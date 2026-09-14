@@ -13,12 +13,14 @@ Codigo implementado e validado localmente:
 - VPC CNI com IRSA separado, CoreDNS, kube-proxy e metrics-server.
 - Logs do control plane no CloudWatch com retencao e suporte a NetworkPolicy no CNI.
 - SG de origem das Lambdas por ambiente e outputs para integrar RDS, funcoes e Gateway.
-- Backend S3 parcial, arquivo de lock do provider e CI com oito testes simulados.
+- Backend S3 parcial, arquivo de lock do provider e oito testes simulados da plataforma.
+- Root gateway/ por ambiente: HTTP API HTTPS, integracao Lambda v2, authorizer JWT e rotas de cliente com backend privado opcional.
+- Logs, limites de requisicoes e 12 testes simulados do Gateway; CI verifica ambos os roots.
 
 **Nenhum recurso AWS foi provisionado.** Testes simulados nao comprovam permissao,
 quota, disponibilidade de instancias/addons, bootstrap dos nos ou conectividade real.
 
-Ainda pendentes: bootstrap do bucket/OIDC de CI, plan autenticado, API Gateway,
+Ainda pendentes: bootstrap do bucket/OIDC de CI, plan autenticado, provisionamento/integracao do Gateway,
 VPC Link, balanceador interno/controller, namespaces/RBAC/NetworkPolicies, autoscaler
 de nos, integracao de observabilidade e CD de staging/producao. Os limites min/max
 do node group nao implementam autoscaling por demanda por si so.
@@ -36,7 +38,7 @@ Dockerfile nao se aplica a este repositorio, que nao produz uma imagem de aplica
 
 ```mermaid
 flowchart LR
-    Client[Cliente] -.-> Gateway[API Gateway - proxima integracao]
+    Client[Cliente] -.-> Gateway[API Gateway - Terraform gateway/]
     Gateway -.-> Auth[Lambda - repo serverless]
     Gateway -.-> Link[VPC Link e ALB interno - pendentes]
     subgraph VPC[VPC - Terraform implementado]
@@ -78,11 +80,15 @@ O [arquivo de exemplo](infra/terraform.tfvars.example) usa conta/role ilustrativ
 Nao e necessario copia-lo para executar os testes.
 [Configuracao, estado remoto e deploy futuro](infra/README.md).
 
+O root gateway/ possui backend proprio por ambiente. Para valida-lo, repita os
+quatro comandos acima com -chdir=gateway. Seus testes tambem usam somente AWS
+simulada. [Bootstrap, rotas e contratos do Gateway](gateway/README.md).
+
 ## CI e branches
 
 Fluxo: `feature/* -> PR develop -> PR master`.
 O workflow `.github/workflows/ci.yml` executa fmt, init sem backend, validate e
-test em PRs para develop/master, pushes nessas branches e acionamento manual.
+test de infra/ e gateway/ em PRs para develop/master, pushes nessas branches e acionamento manual.
 Mantenha **validate-terraform** obrigatorio nas protecoes das duas branches,
 PR obrigatorio, sem bypass, force push ou exclusao. Para trabalho individual,
 aprovacao por outra pessoa pode permanecer desabilitada.
@@ -97,7 +103,7 @@ A variavel nao impede um apply manual no terminal.
 
 O root `infra/` administra recursos compartilhados em **um unico estado**.
 A proposta de CD reserva a aplicacao desse root para a branch master; staging e
-producao terao roots/estados proprios para componentes especificos. Nunca aplicar
+producao usam gateway/ com estados proprios para os Gateways. Nunca aplicar
 essa mesma VPC/EKS em estados diferentes para cada branch. O CD automatico de
 ambos os ambientes e um requisito ainda a implementar; veja o ADR.
 

@@ -20,7 +20,8 @@ Nao copiar tfstate nem conceder leitura irrestrita de estados com segredos entre
 ## Banco
 
 Oficina-infra-database recebe VPC, subnets isoladas e SGs de origem. Cria o RDS sem
-acesso publico, backups, credenciais e bancos logicos por ambiente. Ingress 5432
+acesso publico, backups e senha mestre gerenciada. Bancos logicos e roles por
+ambiente ainda exigem bootstrap separado. Ingress 5432
 deve referenciar SG, sem liberar CIDR publico. Criar tambem egress 5432 dos SGs
 Lambda ao SG RDS, usando aws_vpc_security_group_egress_rule naquele repo.
 A plataforma nao gerencia essas regras de banco em paralelo.
@@ -32,22 +33,24 @@ e namespace correspondente. A API verifica role e propriedade da OS mesmo quando
 o Gateway valida o JWT. A Lambda recebe private_subnet_ids e o SG do seu ambiente,
 consulta RDS e usa chave privada guardada em gerenciador de segredos.
 
-## Gateway (proxima camada neste repositorio)
+## Gateway (root gateway/ neste repositorio)
 
-Planejado API Gateway HTTP API, VPC Link e ALB interno, com destino por ambiente.
+Implementado HTTP API com um state por ambiente, integracao Lambda v2,
+authorizer JWT e integracao privada opcional. VPC Link e ALB interno ainda precisam
+ser criados na etapa de publicacao da API; o root consome seus identificadores.
 O ALB sera gerenciado por Terraform da plataforma e os targets serao registrados
 pelo AWS Load Balancer Controller via TargetGroupBinding, apos instalar o controller.
 Nao criar o mesmo ALB tambem via Ingress/Service do Kubernetes.
 
-Mapa inicial de rotas a implementar e testar:
+Mapa de rotas e estado da implementacao:
 
 | Rota | Destino | Controle |
 |---|---|---|
-| POST /auth/cpf | Lambda auth v2 | Publica, com limitacao de tentativas |
+| POST /auth/cpf | Lambda auth v2 | Implementada, publica com throttling agregado |
 | GET /.well-known/jwks.json e openid-configuration | Lambda auth | Publica, apenas metadados/chaves publicas |
 | /api/minhas-ordens-servico e subrotas | ALB -> API | Autorizador JWT RS256 + scope oficina:cliente; API verifica propriedade |
-| /api/auth/login | ALB -> API | Login administrativo, sem exigir JWT de cliente |
-| Demais rotas /api | ALB -> API | API aplica politicas de cliente/admin e segredo do webhook |
+| /api/auth/login | ALB -> API | Pendente; ainda nao publicada pelo Gateway |
+| Demais rotas /api | ALB -> API | Pendentes; ainda nao publicadas pelo Gateway |
 
 O autorizador JWT nativo HTTP API nao deve ser imposto globalmente: o login
 administrativo atual emite HS256, enquanto o JWT de cliente e RS256. As rotas
@@ -58,8 +61,10 @@ sem as politicas da API nem publicar diretamente o ALB na internet.
 
 Para evitar dependencia circular entre issuer e Lambda: criar o Gateway e sua URL
 antes das integracoes, configurar o issuer na Lambda/API, depois conectar ARN da
-funcao e listener do ALB. A separacao dos roots dessa camada sera implementada
-com o Gateway, sem terraform -target como fluxo normal.
+funcao e listener do ALB. O root gateway/ permite esse fluxo sem terraform -target.
+O campo jwt_ready so deve ser ativado apos verificar os endpoints publicos de
+discovery/JWKS. Backend de cliente exige jwt_ready e mantem JWT+scope em todas as
+quatro rotas implementadas. Veja [runbook do Gateway](../gateway/README.md).
 
 ## Sequencia de deploy a implementar
 
