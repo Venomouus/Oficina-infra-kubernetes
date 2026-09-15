@@ -1,5 +1,6 @@
 resource "aws_iam_role" "cluster" {
-  name = "${local.platform_name}-eks-control-plane"
+  count = var.academy_role_arn == null ? 1 : 0
+  name  = "${local.platform_name}-eks-control-plane"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Principal = { Service = "eks.amazonaws.com" } }]
@@ -7,7 +8,8 @@ resource "aws_iam_role" "cluster" {
 }
 
 resource "aws_iam_role_policy_attachment" "cluster" {
-  role       = aws_iam_role.cluster.name
+  count      = var.academy_role_arn == null ? 1 : 0
+  role       = aws_iam_role.cluster[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSClusterPolicy"
 }
 
@@ -18,7 +20,7 @@ resource "aws_cloudwatch_log_group" "cluster" {
 
 resource "aws_eks_cluster" "platform" {
   name                          = local.cluster_name
-  role_arn                      = aws_iam_role.cluster.arn
+  role_arn                      = var.academy_role_arn != null ? var.academy_role_arn : aws_iam_role.cluster[0].arn
   version                       = var.kubernetes_version
   bootstrap_self_managed_addons = false
   enabled_cluster_log_types     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
@@ -56,22 +58,24 @@ resource "aws_eks_access_policy_association" "administrator" {
 }
 
 resource "aws_iam_openid_connect_provider" "cluster" {
+  count          = var.academy_role_arn == null ? 1 : 0
   url            = aws_eks_cluster.platform.identity[0].oidc[0].issuer
   client_id_list = ["sts.amazonaws.com"]
 }
 
 locals {
-  oidc_host = replace(aws_iam_openid_connect_provider.cluster.url, "https://", "")
+  oidc_host = replace(aws_eks_cluster.platform.identity[0].oidc[0].issuer, "https://", "")
 }
 
 # Credencial exclusiva do aws-node. Nao anexar CNI policy ao IAM role dos workers.
 resource "aws_iam_role" "vpc_cni" {
-  name = "${local.platform_name}-vpc-cni"
+  count = var.academy_role_arn == null ? 1 : 0
+  name  = "${local.platform_name}-vpc-cni"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow", Action = "sts:AssumeRoleWithWebIdentity"
-      Principal = { Federated = aws_iam_openid_connect_provider.cluster.arn }
+      Principal = { Federated = aws_iam_openid_connect_provider.cluster[0].arn }
       Condition = { StringEquals = {
         "${local.oidc_host}:aud" = "sts.amazonaws.com"
         "${local.oidc_host}:sub" = "system:serviceaccount:kube-system:aws-node"
@@ -81,7 +85,8 @@ resource "aws_iam_role" "vpc_cni" {
 }
 
 resource "aws_iam_role_policy_attachment" "vpc_cni" {
-  role       = aws_iam_role.vpc_cni.name
+  count      = var.academy_role_arn == null ? 1 : 0
+  role       = aws_iam_role.vpc_cni[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKS_CNI_Policy"
 }
 
@@ -98,7 +103,7 @@ resource "aws_eks_addon" "vpc_cni" {
   cluster_name                = aws_eks_cluster.platform.name
   addon_name                  = "vpc-cni"
   addon_version               = coalesce(var.addon_versions["vpc-cni"], data.aws_eks_addon_version.platform["vpc-cni"].version)
-  service_account_role_arn    = aws_iam_role.vpc_cni.arn
+  service_account_role_arn    = var.academy_role_arn != null ? null : aws_iam_role.vpc_cni[0].arn
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "PRESERVE"
   configuration_values        = jsonencode({ enableNetworkPolicy = "true" })
@@ -106,7 +111,8 @@ resource "aws_eks_addon" "vpc_cni" {
 }
 
 resource "aws_iam_role" "nodes" {
-  name = "${local.platform_name}-eks-workers"
+  count = var.academy_role_arn == null ? 1 : 0
+  name  = "${local.platform_name}-eks-workers"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Action = "sts:AssumeRole", Principal = { Service = "ec2.amazonaws.com" } }]
@@ -114,8 +120,8 @@ resource "aws_iam_role" "nodes" {
 }
 
 resource "aws_iam_role_policy_attachment" "nodes" {
-  for_each   = toset(["AmazonEKSWorkerNodePolicy", "AmazonEC2ContainerRegistryPullOnly"])
-  role       = aws_iam_role.nodes.name
+  for_each   = var.academy_role_arn != null ? toset([]) : toset(["AmazonEKSWorkerNodePolicy", "AmazonEC2ContainerRegistryPullOnly"])
+  role       = aws_iam_role.nodes[0].name
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/${each.key}"
 }
 
@@ -148,7 +154,7 @@ resource "aws_launch_template" "nodes" {
 resource "aws_eks_node_group" "workers" {
   cluster_name    = aws_eks_cluster.platform.name
   node_group_name = "${local.platform_name}-workers"
-  node_role_arn   = aws_iam_role.nodes.arn
+  node_role_arn   = var.academy_role_arn != null ? var.academy_role_arn : aws_iam_role.nodes[0].arn
   subnet_ids      = [for subnet in aws_subnet.private : subnet.id]
   version         = var.kubernetes_version
   ami_type        = "AL2023_x86_64_STANDARD"

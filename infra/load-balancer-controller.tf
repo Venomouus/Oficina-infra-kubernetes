@@ -1,13 +1,14 @@
 # Um controlador compartilhado: registra pods em TGs criados pelo root backend/.
 # Nao recebe permissao de criar ALB, TG ou editar Security Groups.
 resource "aws_iam_role" "load_balancer_controller" {
-  name = "${local.platform_name}-targetgroup-controller"
+  count = var.academy_role_arn == null ? 1 : 0
+  name  = "${local.platform_name}-targetgroup-controller"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
       Action    = "sts:AssumeRoleWithWebIdentity"
-      Principal = { Federated = aws_iam_openid_connect_provider.cluster.arn }
+      Principal = { Federated = aws_iam_openid_connect_provider.cluster[0].arn }
       Condition = { StringEquals = {
         "${local.oidc_host}:aud" = "sts.amazonaws.com"
         "${local.oidc_host}:sub" = "system:serviceaccount:kube-system:aws-load-balancer-controller"
@@ -16,8 +17,9 @@ resource "aws_iam_role" "load_balancer_controller" {
   })
 }
 resource "aws_iam_role_policy" "target_registration" {
-  name = "existing-target-groups"
-  role = aws_iam_role.load_balancer_controller.id
+  count = var.academy_role_arn == null ? 1 : 0
+  name  = "existing-target-groups"
+  role  = aws_iam_role.load_balancer_controller[0].id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -48,10 +50,12 @@ output "load_balancer_controller_values" {
     region       = var.aws_region
     vpcId        = aws_vpc.platform.id
     replicaCount = 2
+    hostNetwork  = var.academy_role_arn != null
+    dnsPolicy    = var.academy_role_arn != null ? "ClusterFirstWithHostNet" : "ClusterFirst"
     serviceAccount = {
       create      = true
       name        = "aws-load-balancer-controller"
-      annotations = { "eks.amazonaws.com/role-arn" = aws_iam_role.load_balancer_controller.arn }
+      annotations = var.academy_role_arn != null ? {} : { "eks.amazonaws.com/role-arn" = aws_iam_role.load_balancer_controller[0].arn }
     }
     createIngressClassResource            = false
     ingressClassParams                    = { create = false }
