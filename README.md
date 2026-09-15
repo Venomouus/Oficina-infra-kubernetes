@@ -17,13 +17,9 @@ Codigo implementado e validado localmente:
 - Root gateway/ por ambiente: HTTP API HTTPS, integracao Lambda v2, authorizer JWT e rotas de cliente com backend privado opcional.
 - Logs, limites de requisicoes e 12 testes simulados do Gateway.
 
-**Nenhum recurso AWS foi provisionado.** Testes simulados nao comprovam permissao,
-quota, disponibilidade de instancias/addons, bootstrap dos nos ou conectividade real.
+EKS 1.35 com dois workers Ready, VPC/NAT, metrics-server, controlador ALB e backends privados provisionados no Academy. Modo academy_role_arn reutiliza LabRole; conta normal preserva IAM/IRSA separados.
 
-Ainda pendentes: bootstrap do bucket/OIDC de CI, plan autenticado, provisionamento/integracao do Gateway,
-instalacao do controlador, namespaces/RBAC/NetworkPolicies, autoscaler
-de nos, integracao de observabilidade e CD de staging/producao. Os limites min/max
-do node group nao implementam autoscaling por demanda por si so.
+O workflow `academy-deploy.yml` faz deploy de develop/master no runner Windows autorizado (label academy). Requer PC/Docker ativos e credenciais temporarias Academy validas. O codigo compartilhado de deploy fica em [Oficina-Mecanica/academy](https://github.com/Venomouus/Oficina-Mecanica/tree/master/academy). Evidencias e limites finais estao no [pacote de entrega](https://github.com/Venomouus/Oficina-Mecanica/tree/master/docs/entrega).
 
 ## Tecnologias e responsabilidades
 

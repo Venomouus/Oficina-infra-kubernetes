@@ -6,7 +6,8 @@ output "platform" {
     vpc_id              = aws_vpc.platform.id
     cluster_name        = aws_eks_cluster.platform.name
     cluster_arn         = aws_eks_cluster.platform.arn
-    oidc_provider_arn   = aws_iam_openid_connect_provider.cluster.arn
+    oidc_provider_arn   = var.academy_role_arn != null ? null : aws_iam_openid_connect_provider.cluster[0].arn
+    academy_mode        = var.academy_role_arn != null
     oidc_issuer_url     = aws_eks_cluster.platform.identity[0].oidc[0].issuer
     public_subnet_ids   = [for subnet in aws_subnet.public : subnet.id]
     private_subnet_ids  = [for subnet in aws_subnet.private : subnet.id]
