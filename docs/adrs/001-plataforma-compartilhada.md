@@ -1,6 +1,6 @@
 # ADR 001 - EKS compartilhado e estado unico da fundacao
 
-Status: aceita para o laboratorio; operacao AWS ainda nao validada.
+Status: aceita para o laboratorio.
 
 ## Contexto
 
