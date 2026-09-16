@@ -1,6 +1,6 @@
 # ADR 002 — HTTP API separado por ambiente
 
-Status: implementado em Terraform e testes; deploy pendente.
+Status: implementado em Terraform e testes.
 
 Criar um HTTP API por ambiente no root gateway/, usando states separados de
 staging/producao. A fundacao VPC/EKS continua no root infra/ e state compartilhado.
